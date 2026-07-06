@@ -1,0 +1,9 @@
+= advent-of-code-2024
+My Advent of Code Solutions (2019) in whatever language I feel like
+
+== Languages per day
+[cols="1,4",options="header"]
+|===
+| Day | Language
+| link:01/[] | Zig (0.16.0)
+|===
