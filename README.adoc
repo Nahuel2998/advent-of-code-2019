@@ -6,4 +6,5 @@ My Advent of Code Solutions (2019) in whatever language I feel like
 |===
 | Day | Language
 | link:01/[] | Zig (0.16.0)
+| link:02/[] | Zig (0.16.0)
 |===
