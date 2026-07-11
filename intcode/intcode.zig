@@ -22,11 +22,14 @@ const ParameterMode = enum {
 };
 
 pub const Input = struct {
-    buf: []const i32,
-    i:   usize = 0,
+    buf: *std.ArrayList(i32),
+    i:    usize = 0,
 
-    fn read(self: *Input) i32 {
-        const res = self.buf[self.i];
+    fn read(self: *Input) !i32 {
+        if (self.i >= self.buf.items.len) {
+            return error.AwaitingInput;
+        }
+        const res = self.buf.items[self.i];
         self.i += 1;
         return res;
     }
@@ -72,7 +75,7 @@ pub const RunContext = struct {
                 self.ip += 4;
             },
             .in => { // in,res
-                self.lparam(0).* = self.stdin.?.read();
+                self.lparam(0).* = try self.stdin.?.read();
                 self.ip += 2;
             },
             .out => { // out,a

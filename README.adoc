@@ -11,4 +11,5 @@ My Advent of Code Solutions (2019) in whatever language I feel like
 | link:04/[] | Zig (0.16.0)
 | link:05/[] | Zig (0.16.0)
 | link:06/[] | Zig (0.16.0)
+| link:07/[] | Zig (0.16.0)
 |===
