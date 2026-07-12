@@ -2,7 +2,9 @@ const std = @import("std");
 
 const Self = @This();
 
-code: []const i64,
+code: []const Word,
+
+pub const Word = i64;
 
 const Op = enum (u32) {
     add = 1,
@@ -13,19 +15,25 @@ const Op = enum (u32) {
     jz,
     lt,
     eq,
+    rbo,
     halt = 99,
 };
 
 const ParameterMode = enum {
     position,
     immediate,
+    relative,
+
+    fn of(modes: Word, idx: usize) ParameterMode {
+        return @enumFromInt(@rem(@divTrunc(modes, std.math.pow(Word, 10, @intCast(idx))), 10));
+    }
 };
 
 pub const Input = struct {
-    buf: *std.ArrayList(i64),
+    buf: *std.ArrayList(Word),
     i:    usize = 0,
 
-    fn read(self: *Input) !i64 {
+    fn read(self: *Input) !Word {
         if (self.i >= self.buf.items.len) {
             return error.AwaitingInput;
         }
@@ -35,102 +43,135 @@ pub const Input = struct {
     }
 };
 pub const Output = struct {
-    buf:      *std.ArrayList(i64),   
+    buf:      *std.ArrayList(Word),   
     allocator: std.mem.Allocator,
 
-    fn write(self: *Output, value: i64) !void {
+    fn write(self: *Output, value: Word) !void {
         try self.buf.append(self.allocator, value);
     }
 };
 
 pub const RunContext = struct {
-    ip:     u32,
-    code: []i64,
+    code: []Word,
+    ip:     u32  = 0,
+    rb:     Word = 0,
 
     stdin:  ?Input  = null,
     stdout: ?Output = null,
 
-    pub fn init(allocator: std.mem.Allocator, code: []const i64) !RunContext {
-        const copy = try allocator.dupe(i64, code);
-        return .{ .ip = 0, .code = copy };
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator, code: []const Word) !RunContext {
+        const copy = try allocator.dupe(Word, code);
+        return .{ .code = copy, .allocator = allocator };
     }
 
-    // TODO: I don't like how self.ip is incremented
+    pub fn deinit(self: RunContext) void {
+        self.allocator.free(self.code);
+    }
+
+    // Access self.code allowing oob
+    fn mem(self: *RunContext, idx: usize) !*Word {
+        const len = self.code.len;
+        if (idx >= len) {
+            self.code = try self.allocator.realloc(self.code, idx + 1);
+            @memset(self.code[len..], 0);
+        }
+        return &self.code[idx];
+    }
+
     fn step(self: *RunContext) !bool {
         if (self.ip >= self.code.len) return error.NoHalt;
 
-        const param_modes = @divTrunc(self.code[self.ip], 100);
+        const pms = @divTrunc(self.code[self.ip], 100);
         const op: Op = @enumFromInt(@rem(self.code[self.ip], 100));
         switch (op) {
             .add => { // add,a,b,res
-                const a = self.param(param_modes, 0);
-                const b = self.param(param_modes, 1);
-                self.lparam(2).* = a + b;
+                const a   = try self.param(pms, 0);
+                const b   = try self.param(pms, 1);
+                const res = try self.lparam(pms, 2);
+                res.* = a + b;
                 self.ip += 4;
             },
             .mul => { // mul,a,b,res
-                const a = self.param(param_modes, 0);
-                const b = self.param(param_modes, 1);
-                self.lparam(2).* = a * b;
+                const a   = try self.param(pms, 0);
+                const b   = try self.param(pms, 1);
+                const res = try self.lparam(pms, 2);
+                res.* = a * b;
                 self.ip += 4;
             },
             .in => { // in,res
-                self.lparam(0).* = try self.stdin.?.read();
+                const res = try self.lparam(pms, 0);
+                res.* = try self.stdin.?.read();
                 self.ip += 2;
             },
             .out => { // out,a
-                const a = self.param(param_modes, 0);
+                const a = try self.param(pms, 0);
                 try self.stdout.?.write(a);
                 self.ip += 2;
             },
             .jnz => { // jnz,a,b
-                const a = self.param(param_modes, 0);
+                const a = try self.param(pms, 0);
                 if (a != 0) {
-                    const b = self.param(param_modes, 1);
+                    const b = try self.param(pms, 1);
                     self.ip = @intCast(b);
                 } else {
                     self.ip += 3;
                 }
             },
             .jz => { // jz,a,b
-                const a = self.param(param_modes, 0);
+                const a = try self.param(pms, 0);
                 if (a == 0) {
-                    const b = self.param(param_modes, 1);
+                    const b = try self.param(pms, 1);
                     self.ip = @intCast(b);
                 } else {
                     self.ip += 3;
                 }
             },
             .lt => { // lt,a,b,res
-                const a = self.param(param_modes, 0);
-                const b = self.param(param_modes, 1);
-                self.lparam(2).* = @intFromBool(a < b);
+                const a   = try self.param(pms, 0);
+                const b   = try self.param(pms, 1);
+                const res = try self.lparam(pms, 2);
+                res.* = @intFromBool(a < b);
                 self.ip += 4;
             },
             .eq => { // eq,a,b,res
-                const a = self.param(param_modes, 0);
-                const b = self.param(param_modes, 1);
-                self.lparam(2).* = @intFromBool(a == b);
+                const a   = try self.param(pms, 0);
+                const b   = try self.param(pms, 1);
+                const res = try self.lparam(pms, 2);
+                res.* = @intFromBool(a == b);
                 self.ip += 4;
             },
+            .rbo => { // rbo,a
+                const a = try self.param(pms, 0);
+                self.rb += a;
+                self.ip += 2;
+            },
             .halt => {
-                self.ip += 1;
                 return false;
             },
         }
         return true;
     }
 
-    fn param(self: RunContext, modes: i64, idx: usize) i64 {
-        const pmode: ParameterMode = @enumFromInt(@rem(@divTrunc(modes, std.math.pow(i64, 10, @intCast(idx))), 10));
+    fn param(self: *RunContext, modes: Word, idx: usize) !Word {
+        const pmode = ParameterMode.of(modes, idx);
+        const arg   = self.code[self.ip + idx + 1];
         return switch (pmode) {
-            .position  => self.code[@intCast(self.code[self.ip + idx + 1])],
-            .immediate =>                    self.code[self.ip + idx + 1],
+            .immediate =>                         arg,
+            .position  => (try self.mem( @intCast(arg) )).*,
+            .relative  => (try self.mem( @intCast(arg + self.rb) )).*,
         };
     }
 
-    fn lparam(self: RunContext, idx: usize) *i64 {
-        return &self.code[@intCast(self.code[self.ip + idx + 1])];
+    fn lparam(self: *RunContext, modes: Word, idx: usize) !*Word {
+        const pmode = ParameterMode.of(modes, idx);
+        const arg   = self.code[self.ip + idx + 1];
+        return switch (pmode) {
+            .immediate => unreachable,
+            .position  => try self.mem( @intCast(arg) ),
+            .relative  => try self.mem( @intCast(arg + self.rb) ),
+        };
     }
 
     pub fn run(self: *RunContext) !void {
@@ -141,10 +182,10 @@ pub const RunContext = struct {
 };
 
 pub fn init(allocator: std.mem.Allocator, input: []const u8) !Self {
-    var code: std.ArrayList(i64) = .empty;
+    var code: std.ArrayList(Word) = .empty;
     var it = std.mem.tokenizeScalar(u8, std.mem.trimEnd(u8, input, " \n"), ',');
     while (it.next()) |int| {
-        try code.append(allocator, try std.fmt.parseInt(i64, int, 10));
+        try code.append(allocator, try std.fmt.parseInt(Word, int, 10));
     }
     return .{ .code = code.items };
 }

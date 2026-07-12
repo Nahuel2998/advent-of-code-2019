@@ -1,19 +1,21 @@
 const std = @import("std");
-const Intcode = @import("intcode.zig");
 
-const PHASES_1 = &[_]i64{0, 1, 2, 3, 4};
-const PHASES_2 = &[_]i64{5, 6, 7, 8, 9};
+const Intcode = @import("intcode.zig");
+const Word    = Intcode.Word;
+
+const PHASES_1 = &[_]Word{0, 1, 2, 3, 4};
+const PHASES_2 = &[_]Word{5, 6, 7, 8, 9};
 
 // FIXME: Make this not do that many allocs?
-fn permutations(allocator: std.mem.Allocator, items: []const i64) ![][]i64 {
-    var res: std.ArrayList([]i64) = .empty;
+fn permutations(allocator: std.mem.Allocator, items: []const Word) ![][]Word {
+    var res: std.ArrayList([]Word) = .empty;
     if (items.len == 1) {
-        const buf = try allocator.dupe(i64, items);
+        const buf = try allocator.dupe(Word, items);
         try res.append(allocator, buf);
         return try res.toOwnedSlice(allocator);
     }
 
-    var others_buf: []i64 = try allocator.alloc(i64, items.len - 1);
+    var others_buf: []Word = try allocator.alloc(Word, items.len - 1);
     defer allocator.free(others_buf);
 
     for (items) |lead| {
@@ -30,7 +32,7 @@ fn permutations(allocator: std.mem.Allocator, items: []const i64) ![][]i64 {
         for (perms) |perm| {
             defer allocator.free(perm);
 
-            var buf: []i64 = try allocator.alloc(i64, items.len);
+            var buf: []Word = try allocator.alloc(Word, items.len);
             buf[0] = lead;
             @memcpy(buf[1..], perm);
 
@@ -40,10 +42,10 @@ fn permutations(allocator: std.mem.Allocator, items: []const i64) ![][]i64 {
     return try res.toOwnedSlice(allocator);
 }
 
-fn maxThrusterSignal(allocator: std.mem.Allocator, program: Intcode, perms: [][]i64) !i64 {
-    var res: i64 = 0;
+fn maxThrusterSignal(allocator: std.mem.Allocator, program: Intcode, perms: [][]Word) !Word {
+    var res: Word = 0;
 
-    var bufs: [5]std.ArrayList(i64) = .{ std.ArrayList(i64).empty } ** 5;
+    var bufs: [5]std.ArrayList(Word) = .{ std.ArrayList(Word).empty } ** 5;
     var runs: [5]Intcode.RunContext = undefined;
     for (perms) |perm| {
         for (&bufs, perm, &runs, 0..) |*buf, phase, *run, i| {
