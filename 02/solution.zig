@@ -33,7 +33,7 @@ test "examples" {
     defer arena.deinit();
 
     var program = try Intcode.init(arena.allocator(), "1,1,1,4,99,5,6,0,99");
-    const   res = try program.run(arena.allocator());
+    const   res = try program.run(arena.allocator(), null, null);
 
     try std.testing.expectEqual(30, res.code[0]);
 }

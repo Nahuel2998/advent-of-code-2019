@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Self = @This();
 
-code: []const i32,
+code: []const i64,
 
 const Op = enum (u32) {
     add = 1,
@@ -22,10 +22,10 @@ const ParameterMode = enum {
 };
 
 pub const Input = struct {
-    buf: *std.ArrayList(i32),
+    buf: *std.ArrayList(i64),
     i:    usize = 0,
 
-    fn read(self: *Input) !i32 {
+    fn read(self: *Input) !i64 {
         if (self.i >= self.buf.items.len) {
             return error.AwaitingInput;
         }
@@ -35,23 +35,23 @@ pub const Input = struct {
     }
 };
 pub const Output = struct {
-    buf:      *std.ArrayList(i32),   
+    buf:      *std.ArrayList(i64),   
     allocator: std.mem.Allocator,
 
-    fn write(self: *Output, value: i32) !void {
+    fn write(self: *Output, value: i64) !void {
         try self.buf.append(self.allocator, value);
     }
 };
 
 pub const RunContext = struct {
     ip:     u32,
-    code: []i32,
+    code: []i64,
 
     stdin:  ?Input  = null,
     stdout: ?Output = null,
 
-    pub fn init(allocator: std.mem.Allocator, code: []const i32) !RunContext {
-        const copy = try allocator.dupe(i32, code);
+    pub fn init(allocator: std.mem.Allocator, code: []const i64) !RunContext {
+        const copy = try allocator.dupe(i64, code);
         return .{ .ip = 0, .code = copy };
     }
 
@@ -121,15 +121,15 @@ pub const RunContext = struct {
         return true;
     }
 
-    fn param(self: RunContext, modes: i32, idx: usize) i32 {
-        const pmode: ParameterMode = @enumFromInt(@rem(@divTrunc(modes, std.math.pow(i32, 10, @intCast(idx))), 10));
+    fn param(self: RunContext, modes: i64, idx: usize) i64 {
+        const pmode: ParameterMode = @enumFromInt(@rem(@divTrunc(modes, std.math.pow(i64, 10, @intCast(idx))), 10));
         return switch (pmode) {
             .position  => self.code[@intCast(self.code[self.ip + idx + 1])],
             .immediate =>                    self.code[self.ip + idx + 1],
         };
     }
 
-    fn lparam(self: RunContext, idx: usize) *i32 {
+    fn lparam(self: RunContext, idx: usize) *i64 {
         return &self.code[@intCast(self.code[self.ip + idx + 1])];
     }
 
@@ -141,10 +141,10 @@ pub const RunContext = struct {
 };
 
 pub fn init(allocator: std.mem.Allocator, input: []const u8) !Self {
-    var code: std.ArrayList(i32) = .empty;
+    var code: std.ArrayList(i64) = .empty;
     var it = std.mem.tokenizeScalar(u8, std.mem.trimEnd(u8, input, " \n"), ',');
     while (it.next()) |int| {
-        try code.append(allocator, try std.fmt.parseInt(i32, int, 10));
+        try code.append(allocator, try std.fmt.parseInt(i64, int, 10));
     }
     return .{ .code = code.items };
 }
